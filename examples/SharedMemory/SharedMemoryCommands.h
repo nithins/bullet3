@@ -27,7 +27,7 @@
 #define SHARED_MEMORY_MAX_STREAM_CHUNK_SIZE (256*1024)
 
 #define SHARED_MEMORY_SERVER_TEST_C
-#define MAX_DEGREE_OF_FREEDOM 64
+#define MAX_DEGREE_OF_FREEDOM 128
 #define MAX_NUM_SENSORS 256
 #define MAX_URDF_FILENAME_LENGTH 1024
 #define MAX_SDF_FILENAME_LENGTH 1024
@@ -64,6 +64,7 @@ enum EnumSdfArgsUpdateFlags
 struct SdfArgs
 {
 	char m_sdfFileName[MAX_URDF_FILENAME_LENGTH];
+    int m_useMultiBody;
 };
 
 enum EnumUrdfArgsUpdateFlags

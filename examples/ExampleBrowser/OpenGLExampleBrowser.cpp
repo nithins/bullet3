@@ -107,7 +107,7 @@ static CommonExampleInterface* sCurrentDemo = 0;
 static b3AlignedObjectArray<const char*> allNames;
 static float gFixedTimeStep = 0;
 bool gAllowRetina = true;
-
+bool gDisableDemoSelection = false;
 static class ExampleEntries* gAllExamples=0;
 bool sUseOpenGL2 = false;
 bool drawGUI=true;
@@ -556,9 +556,11 @@ struct MyMenuItemHander :public Gwen::Event::Handler
 		Gwen::String laa = Gwen::Utility::UnicodeToString(la);
 		//const char* ha = laa.c_str();
 
-		
-		selectDemo(sCurrentHightlighted);
-		saveCurrentSettings(sCurrentDemoIndex, startFileName);
+		if (!gDisableDemoSelection )
+		{
+			selectDemo(sCurrentHightlighted);
+			saveCurrentSettings(sCurrentDemoIndex, startFileName);
+		}
 	}
 	void onButtonC(Gwen::Controls::Base* pControl)
 	{
@@ -580,8 +582,11 @@ struct MyMenuItemHander :public Gwen::Event::Handler
 		*/
 
 	//	printf("onKeyReturn ! \n");
-		selectDemo(sCurrentHightlighted);
-		saveCurrentSettings(sCurrentDemoIndex, startFileName);
+		if (!gDisableDemoSelection )
+		{
+			selectDemo(sCurrentHightlighted);
+			saveCurrentSettings(sCurrentDemoIndex, startFileName);
+		}
 
 	}
 
@@ -634,10 +639,12 @@ struct QuickCanvas : public Common2dCanvasInterface
 	MyGraphWindow* m_gw[MAX_GRAPH_WINDOWS];
 	GraphingTexture* m_gt[MAX_GRAPH_WINDOWS];
 	int m_curNumGraphWindows;
+	int m_curXpos;
 
 	QuickCanvas(GL3TexLoader* myTexLoader)
 		:m_myTexLoader(myTexLoader),
-		m_curNumGraphWindows(0)
+		m_curNumGraphWindows(0),
+		m_curXpos(0)
 	{
 		for (int i=0;i<MAX_GRAPH_WINDOWS;i++)
 		{
@@ -661,7 +668,8 @@ struct QuickCanvas : public Common2dCanvasInterface
 			MyGraphInput input(gui2->getInternalData());
 			input.m_width=width;
 			input.m_height=height;
-			input.m_xPos = 10000;//GUI will clamp it to the right//300;
+			input.m_xPos = m_curXpos;//GUI will clamp it to the right//300;
+			m_curXpos+=width+20;
 			input.m_yPos = 10000;//GUI will clamp it to bottom
 			input.m_name=canvasName;
 			input.m_texName = canvasName;
@@ -677,6 +685,7 @@ struct QuickCanvas : public Common2dCanvasInterface
 	}
 	virtual void destroyCanvas(int canvasId)
 	{
+	    m_curXpos = 0;
 		btAssert(canvasId>=0);
 		delete m_gt[canvasId];
 		m_gt[canvasId] = 0;
@@ -1094,6 +1103,24 @@ void OpenGLExampleBrowser::update(float deltaTime)
             s_app->drawText(bla,10,10);
 		}
 
+    if (gPngFileName)
+    {
+        
+        static int skip = 0;
+        skip--;
+        if (skip<0)
+        {
+            skip=gPngSkipFrames;
+            //printf("gPngFileName=%s\n",gPngFileName);
+            static int s_frameCount = 100;
+            
+            sprintf(staticPngFileName,"%s%d.png",gPngFileName,s_frameCount++);
+            //b3Printf("Made screenshot %s",staticPngFileName);
+            s_app->dumpNextFrameToPng(staticPngFileName);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
+    }
+
 		
 		if (sCurrentDemo)
 		{
@@ -1136,24 +1163,7 @@ void OpenGLExampleBrowser::update(float deltaTime)
             }
 		}
 
-				if (gPngFileName)
-				{
-
-					static int skip = 0;
-					skip--;
-					if (skip<0)
-					{
-						skip=gPngSkipFrames;
-						//printf("gPngFileName=%s\n",gPngFileName);
-						static int s_frameCount = 100;
-
-						sprintf(staticPngFileName,"%s%d.png",gPngFileName,s_frameCount++);
-						//b3Printf("Made screenshot %s",staticPngFileName);
-						s_app->dumpNextFrameToPng(staticPngFileName);
-						 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-					}
-				}
-
+    
 
 		{
 			
@@ -1224,5 +1234,6 @@ void OpenGLExampleBrowser::update(float deltaTime)
 
 void OpenGLExampleBrowser::setSharedMemoryInterface(class SharedMemoryInterface* sharedMem)
 {
+	gDisableDemoSelection = true;
 	sSharedMem = sharedMem;
 }

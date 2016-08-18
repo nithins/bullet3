@@ -696,7 +696,7 @@ void	PhysicsServerCommandProcessor::createJointMotors(btMultiBody* mb)
 
 		if (supportsJointMotor(mb,mbLinkIndex))
 		{
-			float maxMotorImpulse = 0.f;
+			float maxMotorImpulse = 10000.f;
 			int dof = 0;
 			btScalar desiredVelocity = 0.f;
 			btMultiBodyJointMotor* motor = new btMultiBodyJointMotor(mb,mbLinkIndex,dof,desiredVelocity,maxMotorImpulse);
@@ -711,7 +711,7 @@ void	PhysicsServerCommandProcessor::createJointMotors(btMultiBody* mb)
 }
 
 
-bool PhysicsServerCommandProcessor::loadSdf(const char* fileName, char* bufferServerToClient, int bufferSizeInBytes)
+bool PhysicsServerCommandProcessor::loadSdf(const char* fileName, char* bufferServerToClient, int bufferSizeInBytes, bool useMultiBody)
 {
     btAssert(m_data->m_dynamicsWorld);
 	if (!m_data->m_dynamicsWorld)
@@ -751,7 +751,7 @@ bool PhysicsServerCommandProcessor::loadSdf(const char* fileName, char* bufferSe
             int bodyUniqueId = m_data->allocHandle();
 
             InternalBodyHandle* bodyHandle = m_data->getHandle(bodyUniqueId);
-
+            u2b.setBodyUniqueId(bodyUniqueId);
             {
                 btScalar mass = 0;
                 bodyHandle->m_rootLocalInertialFrame.setIdentity();
@@ -768,7 +768,6 @@ bool PhysicsServerCommandProcessor::loadSdf(const char* fileName, char* bufferSe
             MyMultiBodyCreator creation(m_data->m_guiHelper);
 
             u2b.getRootTransformInWorld(rootTrans);
-            bool useMultiBody = true;
             ConvertURDF2Bullet(u2b,creation, rootTrans,m_data->m_dynamicsWorld,useMultiBody,u2b.getPathPrefix(),true);
 
 
@@ -845,6 +844,7 @@ bool PhysicsServerCommandProcessor::loadUrdf(const char* fileName, const btVecto
 		if (bodyUniqueIdPtr)
 			*bodyUniqueIdPtr= bodyUniqueId;
 
+        u2b.setBodyUniqueId(bodyUniqueId);
 		InternalBodyHandle* bodyHandle = m_data->getHandle(bodyUniqueId);
 
         {
@@ -876,6 +876,7 @@ bool PhysicsServerCommandProcessor::loadUrdf(const char* fileName, const btVecto
         }
 
         btMultiBody* mb = creation.getBulletMultiBody();
+        
 		if (useMultiBody)
 		{
 
@@ -943,7 +944,6 @@ bool PhysicsServerCommandProcessor::loadUrdf(const char* fileName, const btVecto
 
 		} else
 		{
-			btAssert(0);
 
 			return true;
 		}
@@ -1165,15 +1165,21 @@ bool PhysicsServerCommandProcessor::processCommand(const struct SharedMemoryComm
 
                     if (numRemainingPixels>0)
                     {
-                        int maxNumPixels = bufferSizeInBytes/8-1;
+                        int totalBytesPerPixel = 4+4+4;//4 for rgb, 4 for depth, 4 for segmentation mask
+                        int maxNumPixels = bufferSizeInBytes/totalBytesPerPixel-1;
                         unsigned char* pixelRGBA = (unsigned char*)bufferServerToClient;
                         int numRequestedPixels = btMin(maxNumPixels,numRemainingPixels);
 
                         float* depthBuffer = (float*)(bufferServerToClient+numRequestedPixels*4);
+                        int* segmentationMaskBuffer = (int*)(bufferServerToClient+numRequestedPixels*8);
 
                         if ((clientCmd.m_updateFlags & ER_BULLET_HARDWARE_OPENGL)!=0)
 						{
-							m_data->m_guiHelper->copyCameraImageData(clientCmd.m_requestPixelDataArguments.m_viewMatrix,clientCmd.m_requestPixelDataArguments.m_projectionMatrix,pixelRGBA,numRequestedPixels,depthBuffer,numRequestedPixels,startPixelIndex,width,height,&numPixelsCopied);
+							m_data->m_guiHelper->copyCameraImageData(clientCmd.m_requestPixelDataArguments.m_viewMatrix,
+                                                clientCmd.m_requestPixelDataArguments.m_projectionMatrix,pixelRGBA,numRequestedPixels,
+                                                depthBuffer,numRequestedPixels,
+                                                segmentationMaskBuffer, numRequestedPixels,
+                                                startPixelIndex,width,height,&numPixelsCopied);
 						} else
 						{
 
@@ -1194,7 +1200,10 @@ bool PhysicsServerCommandProcessor::processCommand(const struct SharedMemoryComm
 
                             }
 
-							m_data->m_visualConverter.copyCameraImageData(pixelRGBA,numRequestedPixels,depthBuffer,numRequestedPixels,startPixelIndex,&width,&height,&numPixelsCopied);
+							m_data->m_visualConverter.copyCameraImageData(pixelRGBA,numRequestedPixels,
+                                                     depthBuffer,numRequestedPixels,
+                                                     segmentationMaskBuffer, numRequestedPixels,
+                                                     startPixelIndex,&width,&height,&numPixelsCopied);
 						}
 
                         //each pixel takes 4 RGBA values and 1 float = 8 bytes
@@ -1234,8 +1243,9 @@ bool PhysicsServerCommandProcessor::processCommand(const struct SharedMemoryComm
                         {
                             b3Printf("Processed CMD_LOAD_SDF:%s", sdfArgs.m_sdfFileName);
                         }
+                        bool useMultiBody=(clientCmd.m_updateFlags & URDF_ARGS_USE_MULTIBODY) ? sdfArgs.m_useMultiBody : true;
 
-                        bool completedOk = loadSdf(sdfArgs.m_sdfFileName,bufferServerToClient, bufferSizeInBytes);
+                        bool completedOk = loadSdf(sdfArgs.m_sdfFileName,bufferServerToClient, bufferSizeInBytes, useMultiBody);
                         if (completedOk)
                         {
                             //serverStatusOut.m_type = CMD_SDF_LOADING_FAILED;
@@ -1592,6 +1602,12 @@ bool PhysicsServerCommandProcessor::processCommand(const struct SharedMemoryComm
 							int totalDegreeOfFreedomQ = 0;
 							int totalDegreeOfFreedomU = 0;
 
+							if (mb->getNumLinks()>= MAX_DEGREE_OF_FREEDOM)
+							{
+								serverStatusOut.m_type = CMD_ACTUAL_STATE_UPDATE_FAILED;
+								hasStatus = true;
+								break;
+							}
 
 							//always add the base, even for static (non-moving objects)
 							//so that we can easily move the 'fixed' base when needed
