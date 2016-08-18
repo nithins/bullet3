@@ -111,6 +111,14 @@ struct	btSoftBodyHelpers
 		const int* triangles,
 		int ntriangles,
 		bool randomizeConstraints = true);
+
+	/* Create from quadmesh													*/
+	static	btSoftBody*		CreateFromQuadMesh(btSoftBodyWorldInfo& worldInfo,
+		const btScalar*	vertices,
+		const int* quads,
+		int nquads,
+		bool randomizeConstraints = true);
+
 	/* Create from convex-hull												*/ 
 	static	btSoftBody*		CreateFromConvexHull(	btSoftBodyWorldInfo& worldInfo,
 		const btVector3* vertices,

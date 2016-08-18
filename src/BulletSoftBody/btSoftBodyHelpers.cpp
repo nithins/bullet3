@@ -1061,6 +1061,52 @@ btSoftBody*		btSoftBodyHelpers::CreateFromTriMesh(btSoftBodyWorldInfo& worldInfo
 }
 
 //
+btSoftBody * btSoftBodyHelpers::CreateFromQuadMesh(btSoftBodyWorldInfo & worldInfo, const btScalar * vertices, const int * quads, int nquads, bool randomizeConstraints)
+{
+	int		maxidx = 0;
+	int i, j, ni;
+
+	for (i = 0, ni = nquads * 4;i<ni;++i)
+	{
+		maxidx = btMax(quads[i], maxidx);
+	}
+	++maxidx;
+	btAlignedObjectArray<bool>		chks;
+	btAlignedObjectArray<btVector3>	vtx;
+	chks.resize(maxidx*maxidx, false);
+	vtx.resize(maxidx);
+	for (i = 0, j = 0, ni = maxidx * 3;i<ni;++j, i += 3)
+	{
+		vtx[j] = btVector3(vertices[i], vertices[i + 1], vertices[i + 2]);
+	}
+	btSoftBody*		psb = new btSoftBody(&worldInfo, vtx.size(), &vtx[0], 0);
+	for (i = 0, ni = nquads * 4;i<ni;i += 4)
+	{
+		const int idx[] = { quads[i],quads[i + 1],quads[i + 2], quads[i+3] };
+#define IDX(_x_,_y_) ((_y_)*maxidx+(_x_))
+		for (int j = 3, k = 0;k<4;j = k++)
+		{
+			if (!chks[IDX(idx[j], idx[k])])
+			{
+				chks[IDX(idx[j], idx[k])] = true;
+				chks[IDX(idx[k], idx[j])] = true;
+				psb->appendLink(idx[j], idx[k]);
+			}
+		}
+#undef IDX
+		psb->appendFace(idx[0], idx[1], idx[2]);
+		psb->appendFace(idx[0], idx[2], idx[3]);
+	}
+
+	if (randomizeConstraints)
+	{
+		psb->randomizeConstraints();
+	}
+
+	return(psb);
+}
+
+//
 btSoftBody*		btSoftBodyHelpers::CreateFromConvexHull(btSoftBodyWorldInfo& worldInfo,	const btVector3* vertices,
 														int nvertices, bool randomizeConstraints)
 {
